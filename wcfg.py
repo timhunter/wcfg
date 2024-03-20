@@ -388,11 +388,11 @@ class WeightedCFG:
     # topologically-sorted order, from ``lowest to highest'', collapsing things upwards to minimize the work.
     def raise_epsilon_rules(self):
         nullables = self.sorted_nullables()
-        result = None
+        result = self
         for nt in nullables:
             if nt == self._start_symbol:
                 continue
-            result = (result or self).remove_epsilon_rule(nt)
+            result = result.remove_epsilon_rule(nt)
         return result
 
     # Removes a particular epsilon rule 'X -> None', where X is not the start symbol. 
