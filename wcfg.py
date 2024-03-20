@@ -137,20 +137,29 @@ class WeightedCFG:
         for (lhs,rhs,w) in self._nontermrules:
             assert self._start_symbol not in rhs, "Start symbol %s appears on right-hand side of rule %s" % (self._start_symbol, (lhs,rhs,w))
 
+        self._id = None
+        self._od = None
+        self._od2 = None
+
+    def inside(self, nt):
+        if self._id is None:
+            self._id = self._fixed_point_for_ntdict(lambda d: self._update_inside_dict(d))
+        return self._id[nt]
+
+    def outside(self, nt):
+        if self._od is None:
+            self._od = self._fixed_point_for_ntdict(lambda d: self._update_outside_dict(lambda nt: self.inside(nt), d))
+        return self._od[nt]
+
+    # Wrapper for fixed_point function for working with mappings from nonterminals to numbers
+    def _fixed_point_for_ntdict(self, f):
         all_zeros = {nt : 0 for nt in self.all_nonterminals()}
         threshold = 1e-9
         close_enough = lambda d1, d2: all([abs(d1[nt] - d2[nt]) < threshold for nt in self.all_nonterminals()])
         def check(d):
             if math.inf in d.values():
                 raise DivergenceException("Infinite value")
-
-        # print("Before calculating inside:", time.perf_counter())
-        self._id = fixed_point(lambda d: self._update_inside_dict(d), all_zeros, close_enough, check)
-        # print("Finished inside:          ", time.perf_counter())
-        self._od = fixed_point(lambda d: self._update_outside_dict(self._id, d), all_zeros, close_enough, check)
-        # print("Finished outside v1:      ", time.perf_counter())
-        self._od2 = self.solve_outside_system(lambda nt: self._id[nt])
-        # print("Finished outside v2:      ", time.perf_counter())
+        return fixed_point(f, all_zeros, close_enough, check)
 
     # previous is a dictionary mapping nonterminals to weights; return value is another dictionary like that
     def _update_inside_dict(self, previous):
@@ -162,12 +171,12 @@ class WeightedCFG:
         return result
 
     # previous is a dictionary mapping nonterminals to weights; return value is another dictionary like that
-    def _update_outside_dict(self, inside_dict, previous):
+    def _update_outside_dict(self, inside_fn, previous):
         result = {nt : 0 for nt in self.all_nonterminals()}
         result[self._start_symbol] += 1
         for (lhs,rhs,wt) in self._nontermrules:
             for (i,nt) in enumerate(rhs):
-                result[nt] += previous[lhs] * wt * product([inside_dict[x] for x in rhs[:i]]) * product([inside_dict[x] for x in rhs[(i+1):]])
+                result[nt] += previous[lhs] * wt * product([inside_fn(x) for x in rhs[:i]]) * product([inside_fn(x) for x in rhs[(i+1):]])
         return result
 
     def solve_outside_system(self, inside):
@@ -238,13 +247,13 @@ class WeightedCFG:
     ###################################################################################
 
     def nonterm_expectation(self, nt):
-        return self._id[nt] * self._od[nt]
+        return self.inside(nt) * self.outside(nt)
 
     def nonterm_rule_expectation(self, lhs, rhs, w):
-        return self._od[lhs] * w * product(self._id[nt] for nt in rhs)
+        return self.outside(lhs) * w * product(self.inside(nt) for nt in rhs)
 
     def term_rule_expectation(self, lhs, rhs, w):
-        return self._od[lhs] * w
+        return self.outside(lhs) * w
 
     ###################################################################################
 
@@ -422,7 +431,7 @@ class WeightedCFG:
 
     def is_globally_normalized(self):
 
-        return (round(self._id[self._start_symbol], 6) == 1)
+        return (round(self.inside(self._start_symbol), 6) == 1)
 
     def globally_normalize(self):
 
@@ -431,14 +440,14 @@ class WeightedCFG:
 
         for (lhs,rhs,w) in self._nontermrules:
             if lhs == self._start_symbol:
-                new_w = w / self._id[self._start_symbol]
+                new_w = w / self.inside(self._start_symbol)
             else:
                 new_w = w
             nontermrules.append((lhs, rhs, new_w))
 
         for (lhs,rhs,w) in self._termrules:
             if lhs == self._start_symbol:
-                new_w = w / self._id[self._start_symbol]
+                new_w = w / self.inside(self._start_symbol)
             else:
                 new_w = w
             termrules.append((lhs, rhs, new_w))
@@ -466,7 +475,7 @@ class WeightedCFG:
 
     def is_top_down_normalized(self):
 
-        return all(round(self._id[nt],6) == 1 for nt in self.all_nonterminals())
+        return all(round(self.inside(nt),6) == 1 for nt in self.all_nonterminals())
 
     def top_down_normalize(self):
 
@@ -474,16 +483,15 @@ class WeightedCFG:
         termrules = []
 
         for (lhs,rhs,w) in self._nontermrules:
-            # new_w = w * product(self._id[nt] for nt in rhs) / self._id[lhs]
-            num = product(self._id[nt] for nt in rhs)
-            denom = self._id[lhs]
+            num = product(self.inside(nt) for nt in rhs)
+            denom = self.inside(lhs)
             if num == 0:
                 pass # Leave out this rule, any probability mass given to it will be thrown away
             else:
                 nontermrules.append((lhs, rhs, w*num/denom))
 
         for (lhs,rhs,w) in self._termrules:
-            new_w = w / self._id[lhs]
+            new_w = w / self.inside(lhs)
             termrules.append((lhs, rhs, new_w))
 
         return WeightedCFG(nontermrules, termrules, self._start_symbol)
@@ -703,7 +711,7 @@ class WeightedCFG:
         headers = ["nonterminal", "inside", "outside", "expectation"]
         rows = []
         for nt in self.all_nonterminals():
-            rows.append([nt, self._id[nt], self._od[nt], self.nonterm_expectation(nt)])
+            rows.append([nt, self.inside(nt), self.outside(nt), self.nonterm_expectation(nt)])
 
         # If the grammar is top-down normalized (all inside values are 1), do sampling
         if self.is_top_down_normalized():
