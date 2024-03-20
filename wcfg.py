@@ -31,12 +31,14 @@ def fixed_point(f, start, equal, callback=None):
 def dfscb(vertices, edges, cb_discovered = lambda v,t: None, 
                            cb_finished = lambda v,t: None, 
                            cb_root = lambda v: None, 
+                           cb_cycle_found = lambda u,v: None, 
                            cb_descend = lambda u,v: None):
 
     vertices = list(vertices)  # in case we've been given an iterator
     assert all((x in vertices and y in vertices) for (x,y) in edges)
 
     discovered = set([])
+    finished = set([])
     time = 0
 
     def dfs_visit(u,t):
@@ -45,11 +47,14 @@ def dfscb(vertices, edges, cb_discovered = lambda v,t: None,
         discovered.add(u)
         for v in vertices:
             if (u,v) in edges:
-                if v not in discovered:
+                if v in discovered and v not in finished:       # if v is gray
+                    cb_cycle_found(u,v)
+                if v not in discovered:     # if v is white
                     cb_descend(u,v)
                     t = dfs_visit(v,t)
         t = t+1
         cb_finished(u,t)
+        finished.add(u)
         return t
 
     for u in vertices:
@@ -96,6 +101,9 @@ def shortest_paths(vertices, edge_weights):
 ############################################################################################
 
 class DivergenceException(Exception):
+    pass
+
+class CycleFoundException(Exception):
     pass
 
 ############################################################################################
@@ -297,7 +305,9 @@ class WeightedCFG:
             if not changed:
                 break
         finished_list = []
-        dfscb(nullables, edges, cb_finished = lambda v,t: finished_list.append(v))
+        def raise_cycle_exception(u,v):
+            raise CycleFoundException("Found a cycle going from %s to %s" % (u,v))
+        dfscb(nullables, edges, cb_finished = lambda v,t: finished_list.append(v), cb_cycle_found = raise_cycle_exception)
         return finished_list
 
     def remove_unary_loops(self):
