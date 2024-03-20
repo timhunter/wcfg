@@ -364,19 +364,20 @@ class WeightedCFG:
         self._nontermrules = list(filter(lambda r: self.nonterm_rule_expectation(*r) != 0, self._nontermrules))
         self._termrules = list(filter(lambda r: self.term_rule_expectation(*r) != 0, self._termrules))
 
-    # Eliminates epsilon rules if possible, or lifts them upwards so that the only epsilon rule is for the start symbol
+    # Eliminates epsilon rules if possible, or lifts them upwards so that the only epsilon rule is for the start symbol. 
+    # Overall this will involve lifting epsilon rules upwards from each nullable nonterminal. We deal with them in a 
+    # topologically-sorted order, from ``lowest to highest'', collapsing things upwards to minimize the work.
     def raise_epsilon_rules(self):
-        badnts = [lhs for (lhs,rhs,w) in self._termrules if rhs is None and lhs != self._start_symbol]
-        print("badnts:", badnts)
-        if badnts == []:
-            return self
-        else:
-            print("Removing epsilon rule for", badnts[0])
-            return self.remove_epsilon_rule(badnts[0]).raise_epsilon_rules()
+        nullables = self.sorted_nullables()
+        result = None
+        for nt in nullables:
+            if nt == self._start_symbol:
+                continue
+            result = (result or self).remove_epsilon_rule(nt)
+        return result
 
     # Removes a particular epsilon rule 'X -> None', where X is not the start symbol. 
-    # The process might introduce additional epsilon rules, but applying it repeatedly 
-    # can get to a point where the only remaining epsilon rule (if any) is for the start symbol.
+    # This process might introduce additional epsilon rules.
     def remove_epsilon_rule(self, nt):
 
         assert nt != self._start_symbol, "Can't remove an epsilon rule for the start symbol!"
