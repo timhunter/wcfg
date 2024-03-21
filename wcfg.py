@@ -504,6 +504,8 @@ class WeightedCFG:
         rule_ok = lambda lhs,rhs,w: rhs is not None or lhs == self._start_symbol
         assert(all(rule_ok(*r) for r in self._termrules)), "Grammar for derivative must not contain non-initial epsilon rules"
 
+        assert nt in self.all_nonterminals(), ("Nonterminal %s does not exist in the grammar" % nt)
+
         new_nontermrules = []
         new_termrules = []
 
@@ -536,6 +538,7 @@ class WeightedCFG:
 
         for (found_corners,prediction) in stack_segments:
             d = self
+            assert prediction in self.all_nonterminals(), ("Nonterminal %s does not exist in the grammar" % prediction)
             start_symbol = prediction
             for nt in found_corners:
                 d = d.raise_epsilon_rules()
