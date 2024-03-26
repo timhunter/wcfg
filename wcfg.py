@@ -106,6 +106,9 @@ class DivergenceException(Exception):
 class CycleFoundException(Exception):
     pass
 
+class EmptyGrammarException(Exception):
+    pass
+
 ############################################################################################
 
 class WeightedCFG:
@@ -325,7 +328,7 @@ class WeightedCFG:
         result_nontermrules = []
 
         # Construct a directed graph representing the unary rewrite rules
-        vertices = set([])
+        vertices = set(self.all_nonterminals())
         edges = set([])
         for (lhs,rhs,w) in self._nontermrules:
             if len(rhs) == 1 and w != 0:
@@ -382,6 +385,8 @@ class WeightedCFG:
     def remove_useless_rules(self):
         self._nontermrules = list(filter(lambda r: self.nonterm_rule_expectation(*r) != 0, self._nontermrules))
         self._termrules = list(filter(lambda r: self.term_rule_expectation(*r) != 0, self._termrules))
+        if self._nontermrules == [] and self._termrules == []:
+            raise EmptyGrammarException
 
     # Eliminates epsilon rules if possible, or lifts them upwards so that the only epsilon rule is for the start symbol. 
     # Overall this will involve lifting epsilon rules upwards from each nullable nonterminal. We deal with them in a 
