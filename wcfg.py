@@ -157,7 +157,7 @@ class WeightedCFG:
     # Wrapper for fixed_point function for working with mappings from nonterminals to numbers
     def _fixed_point_for_ntdict(self, f):
         all_zeros = {nt : 0 for nt in self.all_nonterminals()}
-        threshold = 1e-9
+        threshold = 1e-12
         close_enough = lambda d1, d2: all([abs(d1[nt] - d2[nt]) < threshold for nt in self.all_nonterminals()])
         def check(d):
             if math.inf in d.values():
